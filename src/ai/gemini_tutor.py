@@ -38,14 +38,32 @@ class GeminiTutorEngine:
             except Exception as e:
                 print(f"[Credentials Write Warning] {e}")
 
+        # 1. Si Railway o el entorno provee las credenciales como variable JSON
+        cred_raw = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+        cred_json = (
+            os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON", "").strip() or 
+            os.getenv("JSON_AGENT_PLATFORM", "").strip()
+        )
+        if cred_raw.startswith("{") and "private_key" in cred_raw:
+            cred_json = cred_raw
+
+        if cred_json:
+            try:
+                import tempfile
+                cred_file = Path(tempfile.gettempdir()) / "gcp_service_account.json"
+                if not cred_file.exists():
+                    with open(cred_file, "w", encoding="utf-8") as f:
+                        f.write(cred_json)
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(cred_file)
+            except Exception as e:
+                print(f"[Credentials Write Warning] {e}")
+
         # 2. Si existe un archivo glassy-*.json en la raíz
-        if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+        cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+        if not cred_path or not os.path.exists(cred_path):
             for f in base_dir.glob("glassy-*.json"):
                 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(f)
                 break
-
-        # 3. Inicializar Google Agent Platform (Vertex AI en Google Cloud)
-        cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
         project_id = os.getenv("GCP_PROJECT_ID", "glassy-508419").strip()
         location = os.getenv("GCP_LOCATION", "us-central1").strip()
 

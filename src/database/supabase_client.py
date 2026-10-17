@@ -54,7 +54,7 @@ class SupabaseManager:
 
     def __init__(self):
         self.url = os.getenv("SUPABASE_URL", "").strip()
-        self.key = os.getenv("SUPABASE_KEY", "").strip()
+        self.key = os.getenv("SUPABASE_KEY", "").strip() or os.getenv("SUPABASE_ANON_KEY", "").strip()
         self.enabled = os.getenv("ENABLE_SUPABASE_VECTOR", "true").lower() in ("true", "1", "yes")
         self.client: Optional[Client] = None
         self._memory_cache: Dict[str, List[Dict[str, Any]]] = {
@@ -97,9 +97,28 @@ class SupabaseManager:
         Utiliza Google Cloud Agent Platform (text-embedding-004) con Service Account,
         o la clave de API si está configurada, con fallback de alta precisión.
         """
-        # 1. Intentar con Google Agent Platform / Vertex AI con Service Account
+        # 1. Resolver credenciales de Google Agent Platform (archivo o JSON crudo en Railway)
+        cred_raw = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+        cred_json = (
+            os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON", "").strip() or 
+            os.getenv("JSON_AGENT_PLATFORM", "").strip()
+        )
+        if cred_raw.startswith("{") and "private_key" in cred_raw:
+            cred_json = cred_raw
+
+        if cred_json:
+            try:
+                import tempfile
+                cred_file = Path(tempfile.gettempdir()) / "gcp_service_account.json"
+                if not cred_file.exists():
+                    with open(cred_file, "w", encoding="utf-8") as f:
+                        f.write(cred_json)
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(cred_file)
+            except Exception:
+                pass
+
         cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
-        if not cred_path:
+        if not cred_path or not os.path.exists(cred_path):
             for f in os.listdir(os.getcwd()):
                 if f.startswith("glassy-") and f.endswith(".json"):
                     cred_path = f
