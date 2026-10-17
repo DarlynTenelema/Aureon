@@ -646,6 +646,89 @@ class SupabaseManager:
 
         return search_corpus_local(query=query, university=university, top_k=top_k)
 
+    def save_university_knowledge(self, doc: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Guarda un nuevo documento de conocimiento universitario en Supabase pgvector.
+        Genera automáticamente el embedding de 768 dimensiones.
+        """
+        import uuid
+        topic = doc.get("topic", "Conocimiento de Ingeniería")
+        content = doc.get("content", "")
+        formula_latex = doc.get("formula_latex", "")
+        emb = self.get_embedding(f"{topic} {content} {formula_latex}")
+        
+        record = {
+            "university": doc.get("university", "MIT / Stanford Open Knowledge"),
+            "country": doc.get("country", "Internacional"),
+            "discipline": doc.get("discipline", "Ingeniería y Matemáticas"),
+            "topic": topic,
+            "formula_latex": formula_latex,
+            "pedagogical_style": doc.get("pedagogical_style", "Enfoque Socrático Multilingüe"),
+            "content": content,
+            "engineering_application": doc.get("engineering_application", ""),
+            "embedding": emb,
+            "metadata": doc.get("metadata", {}),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+
+        if self.is_connected():
+            try:
+                res = self.client.table("university_knowledge").insert(record).execute()
+                if res.data and len(res.data) > 0:
+                    return res.data[0]
+            except Exception as e:
+                print(f"[Supabase Save Knowledge Error] {e}")
+
+        # Fallback in-memory
+        if "university_knowledge" not in self._memory_cache:
+            self._memory_cache["university_knowledge"] = []
+        record["id"] = str(uuid.uuid4())
+        self._memory_cache["university_knowledge"].insert(0, record)
+        return record
+
+    def get_all_university_sources(self, discipline: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Obtiene todas las fuentes y temas universitarios guardados en Supabase Cloud."""
+        if self.is_connected():
+            try:
+                q = self.client.table("university_knowledge").select(
+                    "id, university, country, discipline, topic, formula_latex, pedagogical_style, content, engineering_application, metadata, created_at"
+                ).order("created_at", desc=True)
+                if discipline:
+                    q = q.eq("discipline", discipline)
+                res = q.execute()
+                if res.data:
+                    return res.data
+            except Exception as e:
+                print(f"[Supabase Fetch Sources Error] {e}")
+
+        # Fallback local corpus + memory
+        all_sources = list(self._memory_cache.get("university_knowledge", []))
+        for i, c in enumerate(UNIVERSITY_KNOWLEDGE_CORPUS):
+            all_sources.append({
+                "id": f"corpus_{i+1}",
+                **c,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+        if discipline:
+            all_sources = [s for s in all_sources if s.get("discipline") == discipline]
+        return all_sources
+
+    def delete_university_knowledge(self, source_id: str) -> bool:
+        """Elimina una fuente o apunte universitario de Supabase Cloud."""
+        if self.is_connected():
+            try:
+                self.client.table("university_knowledge").delete().eq("id", source_id).execute()
+                return True
+            except Exception as e:
+                print(f"[Supabase Delete Knowledge Error] {e}")
+
+        if "university_knowledge" in self._memory_cache:
+            self._memory_cache["university_knowledge"] = [
+                s for s in self._memory_cache["university_knowledge"] if str(s.get("id")) != str(source_id)
+            ]
+        return True
+
+
     def log_session(
         self,
         equation_input: str,

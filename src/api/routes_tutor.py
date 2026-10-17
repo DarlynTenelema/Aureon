@@ -33,6 +33,28 @@ class RagSearchQuery(BaseModel):
     discipline: Optional[str] = None
     top_k: Optional[int] = 3
 
+class ResearchGlobalQuery(BaseModel):
+    topic: str = Field(..., description="Tema científico o de ingeniería a investigar en universidades globales")
+    university_preference: Optional[str] = Field(None, description="Universidad de preferencia: mit, stanford, moscow, tsinghua, harvard, eth, polytechnique")
+    discipline: Optional[str] = Field(None, description="Disciplina de ingeniería: IA, Robótica, SO, Mecánica, Matemáticas")
+
+class IngestSourceQuery(BaseModel):
+    title: str = Field(..., description="Título del documento, apunte o artículo")
+    content: str = Field(..., description="Texto o transcripción de la clase o syllabus")
+    discipline: Optional[str] = Field("Ingeniería General", description="Disciplina asociada")
+    university: Optional[str] = Field("Apunte Personal", description="Institución o autor")
+    formula_latex: Optional[str] = Field(None, description="Fórmula representativa en LaTeX")
+
+class NotebookArtifactQuery(BaseModel):
+    topic: str = Field(..., description="Tema del artefacto")
+    source_content: str = Field(..., description="Contenido de las fuentes a sintetizar")
+    artifact_type: str = Field("study_guide", description="'study_guide', 'equations_formulary', 'exam_challenges', 'faq_deep_dive', 'audio_overview_script'")
+
+class ChatSourcesQuery(BaseModel):
+    query: str = Field(..., description="Pregunta del estudiante")
+    source_ids: Optional[List[str]] = Field(default=None, description="IDs de fuentes activas")
+    history: Optional[List[Dict[str, str]]] = Field(default=None, description="Historial de mensajes previos")
+
 @router.get("/universities")
 def get_universities():
     """Retorna las pedagogías universitarias internacionales soportadas por Aureon."""
@@ -135,3 +157,89 @@ def tutor_status():
         "supabase_vector_enabled": supabase_manager.enabled,
         "available_universities": [p["name"] for p in list_all_pedagogies()]
     }
+
+# ====================================================================
+# ENDPOINTS NOTEBOOKLLM & INVESTIGACIÓN UNIVERSITARIA GLOBAL
+# ====================================================================
+
+@router.post("/research-global")
+def research_global(query: ResearchGlobalQuery):
+    """
+    Investiga conocimiento público de las mejores universidades del mundo
+    (MIT, Stanford, MGU Landau, Tsinghua, ETH, Polytechnique),
+    lo traduce al español con fórmulas KaTeX y lo persiste en Supabase pgvector.
+    """
+    if not query.topic or not query.topic.strip():
+        raise HTTPException(status_code=400, detail="Debes especificar un tema a investigar.")
+
+    dossier = gemini_tutor.research_global_university_topic(
+        topic=query.topic.strip(),
+        university_preference=query.university_preference,
+        discipline=query.discipline
+    )
+    return dossier
+
+@router.post("/ingest-custom-source")
+def ingest_custom_source(query: IngestSourceQuery):
+    """Ingesta apuntes de clase, syllabus o transcripciones del alumno en Supabase pgvector."""
+    if not query.content or not query.content.strip():
+        raise HTTPException(status_code=400, detail="El contenido a ingestar no puede estar vacío.")
+
+    doc = {
+        "topic": query.title.strip(),
+        "content": query.content.strip(),
+        "discipline": query.discipline or "Ingeniería General",
+        "university": query.university or "Apunte Personal",
+        "country": "Ecuador / Local",
+        "formula_latex": query.formula_latex or r"\text{Notas de Estudio}",
+        "pedagogical_style": "Documento Académico Ingestado",
+        "engineering_application": "Material de estudio personalizado para el Instituto Carlos Cisneros"
+    }
+    saved = supabase_manager.save_university_knowledge(doc)
+    return {
+        "success": True,
+        "message": f"Documento '{query.title}' ingestado en Supabase Cloud con éxito.",
+        "source": saved
+    }
+
+@router.get("/sources")
+def get_sources(discipline: Optional[str] = None):
+    """Lista todas las fuentes universitarias y documentos ingestados en Supabase Cloud."""
+    sources = supabase_manager.get_all_university_sources(discipline=discipline)
+    return {"count": len(sources), "sources": sources}
+
+@router.delete("/sources/{source_id}")
+def delete_source(source_id: str):
+    """Elimina una fuente o apunte de Supabase Cloud."""
+    ok = supabase_manager.delete_university_knowledge(source_id)
+    return {"success": ok, "deleted_id": source_id}
+
+@router.post("/generate-notebook-artifact")
+def generate_notebook_artifact(query: NotebookArtifactQuery):
+    """
+    Genera artefactos de estudio estilo NotebookLLM:
+    - 'study_guide': Guía de estudio exhaustiva
+    - 'equations_formulary': Formulario maestro de ecuaciones con KaTeX
+    - 'exam_challenges': Desafíos y exámenes universitarios
+    - 'faq_deep_dive': FAQ técnico y errores comunes
+    - 'audio_overview_script': Guión de podcast socrático a 2 voces
+    """
+    artifact = gemini_tutor.generate_notebook_artifact(
+        topic=query.topic,
+        source_content=query.source_content,
+        artifact_type=query.artifact_type
+    )
+    return artifact
+
+@router.post("/chat-sources")
+def chat_sources(query: ChatSourcesQuery):
+    """Chat fundamentado en las fuentes universitarias ingestadas (grounded Q&A)."""
+    if not query.query or not query.query.strip():
+        raise HTTPException(status_code=400, detail="La pregunta no puede estar vacía.")
+
+    res = gemini_tutor.chat_with_sources(
+        query=query.query.strip(),
+        source_ids=query.source_ids,
+        history=query.history
+    )
+    return res

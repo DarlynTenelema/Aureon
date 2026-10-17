@@ -7,7 +7,7 @@
 const API_BASE = window.location.origin.includes('8000') ? '' : 'http://127.0.0.1:8000';
 
 let state = {
-  currentView: 'universal', // 'universal' | 'parametric' | 'pomodoro' | 'flashcards' | 'mcp'
+  currentView: 'universal', // 'universal' | 'parametric' | 'pomodoro' | 'flashcards' | 'mcp' | 'notebook'
   selectedUniversity: 'stanford',
   universities: [],
   archetypes: [],
@@ -31,6 +31,19 @@ let state = {
     cards: [],
     currentIndex: 0,
     isFlipped: false
+  },
+  // Estado de NotebookLLM Universitario & Investigación Global
+  notebook: {
+    sources: [],
+    activeSource: null,
+    activeArtifactType: 'study_guide',
+    cachedArtifacts: {}, // { [sourceId + '_' + artifactType]: content }
+    audioSynthesis: {
+      isPlaying: false,
+      isPaused: false,
+      utteranceQueue: [],
+      currentIndex: 0
+    }
   }
 };
 
@@ -42,12 +55,14 @@ const tabModeParametric = document.getElementById('tabModeParametric');
 const tabModePomodoro = document.getElementById('tabModePomodoro');
 const tabModeFlashcards = document.getElementById('tabModeFlashcards');
 const tabModeMcp = document.getElementById('tabModeMcp');
+const tabModeNotebook = document.getElementById('tabModeNotebook');
 
 const universalSolverView = document.getElementById('universalSolverView');
 const parametricLabView = document.getElementById('parametricLabView');
 const pomodoroLabView = document.getElementById('pomodoroLabView');
 const flashcardsLabView = document.getElementById('flashcardsLabView');
 const mcpLabView = document.getElementById('mcpLabView');
+const notebookStudioView = document.getElementById('notebookStudioView');
 
 const universityTabsGroup = document.getElementById('universityTabsGroup');
 const pedagogyFlag = document.getElementById('pedagogyFlag');
@@ -255,12 +270,12 @@ function switchView(viewName) {
   state.currentView = viewName;
 
   // Actualizar botones de navegación
-  [tabModeUniversal, tabModeParametric, tabModePomodoro, tabModeFlashcards, tabModeMcp].forEach(btn => {
+  [tabModeUniversal, tabModeParametric, tabModePomodoro, tabModeFlashcards, tabModeMcp, tabModeNotebook].forEach(btn => {
     if (btn) btn.classList.remove('active');
   });
 
   // Ocultar todos los paneles
-  [universalSolverView, parametricLabView, pomodoroLabView, flashcardsLabView, mcpLabView].forEach(panel => {
+  [universalSolverView, parametricLabView, pomodoroLabView, flashcardsLabView, mcpLabView, notebookStudioView].forEach(panel => {
     if (panel) panel.classList.remove('active');
   });
 
@@ -287,6 +302,11 @@ function switchView(viewName) {
     mcpLabView?.classList.add('active');
     activeContextTag.textContent = 'Hub MCP · Protocolo JSON-RPC';
     loadMcpTools();
+  } else if (viewName === 'notebook') {
+    tabModeNotebook?.classList.add('active');
+    notebookStudioView?.classList.add('active');
+    activeContextTag.textContent = 'Notebook Universitario · Investigación Global';
+    loadNotebookSources();
   }
 }
 
@@ -858,6 +878,465 @@ function addChatMessage(content, sender = 'tutor') {
 }
 
 // ==============================================================
+// NOTEBOOK UNIVERSITARIO & BIBLIOTECA GLOBAL (NOTEBOOKLLM STUDIO)
+// ==============================================================
+
+async function loadNotebookSources() {
+  const sourcesContainer = document.getElementById('notebookSourcesList');
+  const countBadge = document.getElementById('sourcesCountBadge');
+  if (!sourcesContainer) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/tutor/sources`);
+    const data = await res.json();
+    state.notebook.sources = data.sources || [];
+
+    if (countBadge) countBadge.textContent = `${state.notebook.sources.length} fuentes`;
+    renderSourcesList(state.notebook.sources);
+
+    // Si no hay fuente activa, seleccionar la primera
+    if (state.notebook.sources.length > 0 && !state.notebook.activeSource) {
+      selectNotebookSource(state.notebook.sources[0]);
+    } else if (state.notebook.activeSource) {
+      selectNotebookSource(state.notebook.activeSource);
+    }
+  } catch (e) {
+    console.error('Error al cargar fuentes universitarias:', e);
+  }
+}
+
+function renderSourcesList(sources) {
+  const container = document.getElementById('notebookSourcesList');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (sources.length === 0) {
+    container.innerHTML = '<div style="font-size:0.75rem; color:var(--text-muted); padding:8px;">No hay fuentes aún. Realiza una investigación o ingesta tus notas.</div>';
+    return;
+  }
+
+  sources.forEach(src => {
+    const card = document.createElement('div');
+    const isActive = state.notebook.activeSource && state.notebook.activeSource.id === src.id;
+    card.className = `notebook-source-card ${isActive ? 'active-source' : ''}`;
+    
+    // Obtener bandera según universidad
+    const univText = (src.university || '').toLowerCase();
+    let flag = '🎓';
+    if (univText.includes('stanford') || univText.includes('mit') || univText.includes('harvard') || univText.includes('usa')) flag = '🇺🇸';
+    else if (univText.includes('moscow') || univText.includes('mgu') || univText.includes('russia')) flag = '🇷🇺';
+    else if (univText.includes('tsinghua') || univText.includes('china')) flag = '🇨🇳';
+    else if (univText.includes('polytechnique') || univText.includes('france')) flag = '🇫🇷';
+    else if (univText.includes('eth') || univText.includes('zürich')) flag = '🇨🇭';
+
+    card.innerHTML = `
+      <div class="source-card-header">
+        <span class="source-univ-tag">${flag} ${src.university || 'Cátedra Abierta'}</span>
+        <button class="btn-delete-source" title="Eliminar fuente" data-id="${src.id}">✕</button>
+      </div>
+      <div class="source-title-text">${src.topic || 'Tema de Estudio'}</div>
+      <div class="source-formula-snippet">${src.formula_latex || src.discipline || ''}</div>
+    `;
+
+    card.addEventListener('click', (e) => {
+      if (e.target.classList.contains('btn-delete-source')) return;
+      selectNotebookSource(src);
+    });
+
+    const delBtn = card.querySelector('.btn-delete-source');
+    delBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteNotebookSource(src.id);
+    });
+
+    container.appendChild(card);
+  });
+}
+
+async function selectNotebookSource(source) {
+  state.notebook.activeSource = source;
+
+  // Actualizar clases activas en la lista
+  const cards = document.querySelectorAll('.notebook-source-card');
+  state.notebook.sources.forEach((s, idx) => {
+    if (cards[idx]) {
+      cards[idx].classList.toggle('active-source', s.id === source.id);
+    }
+  });
+
+  // Actualizar encabezado del Studio
+  const titleEl = document.getElementById('studioTopicTitle');
+  const univBadge = document.getElementById('studioUnivBadge');
+  const discTag = document.getElementById('studioDisciplineTag');
+  const formulaBox = document.getElementById('studioFormulaRender');
+
+  if (titleEl) titleEl.textContent = source.topic || 'Investigación Académica';
+  if (univBadge) univBadge.textContent = `${source.university || 'Consorcio Global'} · ${source.country || 'Internacional'}`;
+  if (discTag) discTag.textContent = source.discipline || 'Ingeniería';
+
+  // Renderizar la fórmula principal con KaTeX
+  if (formulaBox && source.formula_latex) {
+    renderMath(formulaBox, source.formula_latex, true);
+  }
+
+  // Generar o cargar el artefacto activo
+  generateOrLoadArtifact(state.notebook.activeArtifactType || 'study_guide');
+}
+
+async function researchGlobalAcademicTopic(topicOverride = null, univOverride = null, discOverride = null) {
+  const searchInput = document.getElementById('academicSearchInput');
+  const univSelect = document.getElementById('researchUnivSelect');
+  const discSelect = document.getElementById('researchDiscSelect');
+  const btnResearch = document.getElementById('btnResearchGlobal');
+  const renderer = document.getElementById('studioContentRenderer');
+
+  const topic = topicOverride || (searchInput ? searchInput.value.trim() : '');
+  if (!topic) return;
+
+  const univ = univOverride || (univSelect ? univSelect.value : 'all');
+  const disc = discOverride || (discSelect ? discSelect.value : 'all');
+
+  if (btnResearch) {
+    btnResearch.disabled = true;
+    btnResearch.innerHTML = '<span class="loading-spinner"></span> Investigando en Universidades...';
+  }
+
+  if (renderer) {
+    renderer.innerHTML = `
+      <div class="loading-state-box">
+        <span class="pulse-indicator status-cyan"></span>
+        <p><strong>Investigando en MIT, Stanford, MGU Landau, Tsinghua y ETH Zürich...</strong></p>
+        <p style="font-size:0.8rem; color:var(--text-muted); margin-top:6px;">
+          Traduciendo fuentes de inglés, ruso y chino al español y extrayendo ecuaciones gobernantes...
+        </p>
+      </div>
+    `;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/tutor/research-global`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic: topic,
+        university_preference: univ === 'all' ? null : univ,
+        discipline: disc === 'all' ? null : disc
+      })
+    });
+
+    const data = await res.json();
+    playAudioChime(783.99, 0.4);
+
+    // Agregar a la lista de fuentes y seleccionarla
+    state.notebook.sources.unshift(data);
+    renderSourcesList(state.notebook.sources);
+    selectNotebookSource(data);
+
+    // Cachear la guía de estudio generada
+    const cacheKey = `${data.id || data.topic}_study_guide`;
+    state.notebook.cachedArtifacts[cacheKey] = data.content;
+
+  } catch (e) {
+    console.error('Error al investigar tema global:', e);
+    if (renderer) {
+      renderer.innerHTML = `<div style="color:#ef4444;">Error en la investigación: ${e.message}</div>`;
+    }
+  } finally {
+    if (btnResearch) {
+      btnResearch.disabled = false;
+      btnResearch.innerHTML = '<span>⚡ Investigar & Traducir al Español</span>';
+    }
+  }
+}
+
+async function generateOrLoadArtifact(artifactType) {
+  state.notebook.activeArtifactType = artifactType;
+
+  // Actualizar tabs
+  document.querySelectorAll('#studioArtifactTabs .artifact-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.artifact === artifactType);
+  });
+
+  // Mostrar u ocultar barra de Audio Podcast
+  const podcastBanner = document.getElementById('audioPodcastBanner');
+  if (podcastBanner) {
+    if (artifactType === 'audio_overview_script') {
+      podcastBanner.classList.remove('hidden');
+    } else {
+      podcastBanner.classList.add('hidden');
+      stopAudioPodcast();
+    }
+  }
+
+  const activeSrc = state.notebook.activeSource;
+  if (!activeSrc) return;
+
+  const renderer = document.getElementById('studioContentRenderer');
+  const cacheKey = `${activeSrc.id || activeSrc.topic}_${artifactType}`;
+
+  // Si ya está en caché, mostrar inmediatamente
+  if (state.notebook.cachedArtifacts[cacheKey]) {
+    renderer.innerHTML = renderMarkdownWithMath(state.notebook.cachedArtifacts[cacheKey]);
+    return;
+  }
+
+  // Si no, solicitar generación al backend
+  if (renderer) {
+    renderer.innerHTML = `
+      <div class="loading-state-box">
+        <span class="pulse-indicator status-purple"></span>
+        <p>Generando <strong>${getArtifactLabel(artifactType)}</strong> con IA...</p>
+      </div>
+    `;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/tutor/generate-notebook-artifact`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic: activeSrc.topic || activeSrc.title,
+        source_content: activeSrc.content || '',
+        artifact_type: artifactType
+      })
+    });
+
+    const data = await res.json();
+    state.notebook.cachedArtifacts[cacheKey] = data.content;
+    renderer.innerHTML = renderMarkdownWithMath(data.content);
+
+  } catch (e) {
+    console.error('Error al generar artefacto:', e);
+    if (renderer) renderer.innerHTML = `<div style="color:#ef4444;">Error al generar artefacto: ${e.message}</div>`;
+  }
+}
+
+function getArtifactLabel(type) {
+  const map = {
+    'study_guide': 'Guía de Estudio Exhaustiva',
+    'equations_formulary': 'Formulario Maestro de Ecuaciones (KaTeX)',
+    'exam_challenges': 'Desafíos de Examen Universitario',
+    'faq_deep_dive': 'FAQ Técnico & Errores Frecuentes',
+    'audio_overview_script': 'Guión de Audio Podcast Socrático'
+  };
+  return map[type] || 'Artefacto de Estudio';
+}
+
+// Reproducción de Podcast a 2 Voces (Elena & Mateo)
+function togglePlayPodcast() {
+  const synthState = state.notebook.audioSynthesis;
+  if (synthState.isPlaying) {
+    stopAudioPodcast();
+    return;
+  }
+
+  const activeSrc = state.notebook.activeSource;
+  if (!activeSrc) return;
+
+  const cacheKey = `${activeSrc.id || activeSrc.topic}_audio_overview_script`;
+  const scriptText = state.notebook.cachedArtifacts[cacheKey] || '';
+  if (!scriptText) return;
+
+  playAudioPodcast(scriptText);
+}
+
+function playAudioPodcast(scriptText) {
+  if (!('speechSynthesis' in window)) {
+    alert('Tu navegador no soporta síntesis de voz Web Speech API.');
+    return;
+  }
+
+  window.speechSynthesis.cancel();
+
+  // Dividir el guión por turnos de diálogo
+  const lines = scriptText.split('\n');
+  const turns = [];
+
+  lines.forEach(line => {
+    const clean = line.trim();
+    if (clean.includes('Elena Ramos:') || clean.includes('Dra. Elena Ramos:')) {
+      turns.push({ speaker: 'elena', text: clean.replace(/.*?Elena Ramos:\s*/i, '') });
+    } else if (clean.includes('Mateo Silva:') || clean.includes('Dr. Mateo Silva:')) {
+      turns.push({ speaker: 'mateo', text: clean.replace(/.*?Mateo Silva:\s*/i, '') });
+    }
+  });
+
+  if (turns.length === 0) {
+    // Si no hubo formato explícito, leer párrafos alternando
+    lines.filter(l => l.trim().length > 20).forEach((l, idx) => {
+      turns.push({ speaker: idx % 2 === 0 ? 'elena' : 'mateo', text: l.trim() });
+    });
+  }
+
+  state.notebook.audioSynthesis.isPlaying = true;
+  state.notebook.audioSynthesis.utteranceQueue = turns;
+  state.notebook.audioSynthesis.currentIndex = 0;
+
+  // Actualizar UI
+  const playIcon = document.getElementById('playPodcastIcon');
+  const playText = document.getElementById('playPodcastText');
+  const waveAnim = document.getElementById('podcastWaveAnim');
+
+  if (playIcon) playIcon.textContent = '⏸';
+  if (playText) playText.textContent = 'Pausar Podcast';
+  if (waveAnim) waveAnim.classList.add('playing');
+
+  speakNextPodcastTurn();
+}
+
+function speakNextPodcastTurn() {
+  const synthState = state.notebook.audioSynthesis;
+  if (!synthState.isPlaying || synthState.currentIndex >= synthState.utteranceQueue.length) {
+    stopAudioPodcast();
+    return;
+  }
+
+  const turn = synthState.utteranceQueue[synthState.currentIndex];
+  const cleanText = turn.text
+    .replace(/\$\$(.*?)\$\$/gs, '')
+    .replace(/\$(.*?)\$/g, '')
+    .replace(/[#*_`]/g, '');
+
+  const utterance = new SpeechSynthesisUtterance(cleanText);
+  utterance.lang = 'es-ES';
+
+  // Configuración de voces: Elena (voz aguda/femenina), Mateo (voz grave)
+  if (turn.speaker === 'elena') {
+    utterance.pitch = 1.2;
+    utterance.rate = 1.05;
+  } else {
+    utterance.pitch = 0.85;
+    utterance.rate = 0.98;
+  }
+
+  utterance.onend = () => {
+    synthState.currentIndex++;
+    speakNextPodcastTurn();
+  };
+
+  utterance.onerror = () => {
+    stopAudioPodcast();
+  };
+
+  window.speechSynthesis.speak(utterance);
+}
+
+function stopAudioPodcast() {
+  window.speechSynthesis?.cancel();
+  state.notebook.audioSynthesis.isPlaying = false;
+  state.notebook.audioSynthesis.currentIndex = 0;
+
+  const playIcon = document.getElementById('playPodcastIcon');
+  const playText = document.getElementById('playPodcastText');
+  const waveAnim = document.getElementById('podcastWaveAnim');
+
+  if (playIcon) playIcon.textContent = '▶';
+  if (playText) playText.textContent = 'Reproducir Audio Podcast';
+  if (waveAnim) waveAnim.classList.remove('playing');
+}
+
+// Chat Grounded con las Fuentes
+async function sendGroundedChatQuery() {
+  const input = document.getElementById('groundedChatInput');
+  const stream = document.getElementById('groundedChatStream');
+  if (!input || !stream) return;
+
+  const query = input.value.trim();
+  if (!query) return;
+
+  input.value = '';
+
+  // Mensaje del usuario
+  const userBubble = document.createElement('div');
+  userBubble.className = 'chat-bubble user';
+  userBubble.textContent = query;
+  stream.appendChild(userBubble);
+  stream.scrollTop = stream.scrollHeight;
+
+  // Burbuja del tutor
+  const tutorBubble = document.createElement('div');
+  tutorBubble.className = 'chat-bubble tutor';
+  tutorBubble.innerHTML = '<span class="loading-spinner"></span> Consultando fuentes universitarias...';
+  stream.appendChild(tutorBubble);
+  stream.scrollTop = stream.scrollHeight;
+
+  try {
+    const activeSrc = state.notebook.activeSource;
+    const sourceIds = activeSrc ? [activeSrc.id] : [];
+
+    const res = await fetch(`${API_BASE}/api/tutor/chat-sources`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: query,
+        source_ids: sourceIds
+      })
+    });
+
+    const data = await res.json();
+    tutorBubble.innerHTML = renderMarkdownWithMath(data.answer || 'Sin respuesta.');
+    stream.scrollTop = stream.scrollHeight;
+    playAudioChime(659.25, 0.4);
+
+  } catch (e) {
+    tutorBubble.innerHTML = `<span style="color:#ef4444;">Error en consulta: ${e.message}</span>`;
+  }
+}
+
+// Ingesta de Apunte Personal
+async function submitCustomNote() {
+  const titleInput = document.getElementById('customNoteTitle');
+  const contentInput = document.getElementById('customNoteContent');
+  if (!titleInput || !contentInput) return;
+
+  const title = titleInput.value.trim();
+  const content = contentInput.value.trim();
+  if (!title || !content) {
+    alert('Ingresa el título y contenido del apunte a ingestar.');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/tutor/ingest-custom-source`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: title,
+        content: content,
+        discipline: 'Ingeniería General',
+        university: 'Apunte Personal (Darlyn David)'
+      })
+    });
+
+    const data = await res.json();
+    playAudioChime(523.25, 0.4);
+
+    titleInput.value = '';
+    contentInput.value = '';
+    document.getElementById('manualIngestBox')?.classList.add('hidden');
+
+    loadNotebookSources();
+  } catch (e) {
+    alert(`Error al ingestar: ${e.message}`);
+  }
+}
+
+// Eliminar fuente de Supabase
+async function deleteNotebookSource(sourceId) {
+  if (!confirm('¿Deseas eliminar esta fuente de tu base de datos de estudio?')) return;
+
+  try {
+    await fetch(`${API_BASE}/api/tutor/sources/${sourceId}`, {
+      method: 'DELETE'
+    });
+    playAudioChime(440.0, 0.3);
+    loadNotebookSources();
+  } catch (e) {
+    console.error('Error al eliminar fuente:', e);
+  }
+}
+
+// ==============================================================
 // INICIALIZACIÓN DE EVENTOS Y ARRANQUE
 // ==============================================================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -867,6 +1346,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   tabModePomodoro?.addEventListener('click', () => switchView('pomodoro'));
   tabModeFlashcards?.addEventListener('click', () => switchView('flashcards'));
   tabModeMcp?.addEventListener('click', () => switchView('mcp'));
+  tabModeNotebook?.addEventListener('click', () => switchView('notebook'));
 
   // 2. Lentes Universitarios
   document.querySelectorAll('.univ-tab-btn').forEach(btn => {
@@ -1015,8 +1495,98 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // 11. Eventos del Notebook Universitario (NotebookLLM)
+  const btnResearchGlobal = document.getElementById('btnResearchGlobal');
+  btnResearchGlobal?.addEventListener('click', () => researchGlobalAcademicTopic());
+
+  const academicSearchInput = document.getElementById('academicSearchInput');
+  academicSearchInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') researchGlobalAcademicTopic();
+  });
+
+  document.querySelectorAll('.presets-grid-mini .chip-mini').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const topic = chip.dataset.topic;
+      const univ = chip.dataset.univ;
+      const disc = chip.dataset.disc;
+      if (academicSearchInput) academicSearchInput.value = topic;
+      researchGlobalAcademicTopic(topic, univ, disc);
+    });
+  });
+
+  const btnToggleIngestForm = document.getElementById('btnToggleIngestForm');
+  btnToggleIngestForm?.addEventListener('click', () => {
+    const box = document.getElementById('manualIngestBox');
+    box?.classList.toggle('hidden');
+  });
+
+  const btnSubmitCustomSource = document.getElementById('btnSubmitCustomSource');
+  btnSubmitCustomSource?.addEventListener('click', submitCustomNote);
+
+  document.querySelectorAll('#studioArtifactTabs .artifact-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      generateOrLoadArtifact(tab.dataset.artifact);
+    });
+  });
+
+  const btnPlayPodcast = document.getElementById('btnPlayPodcast');
+  btnPlayPodcast?.addEventListener('click', togglePlayPodcast);
+
+  const btnStopPodcast = document.getElementById('btnStopPodcast');
+  btnStopPodcast?.addEventListener('click', stopAudioPodcast);
+
+  const btnCopyArtifact = document.getElementById('btnCopyArtifact');
+  btnCopyArtifact?.addEventListener('click', () => {
+    const renderer = document.getElementById('studioContentRenderer');
+    if (!renderer) return;
+    navigator.clipboard.writeText(renderer.innerText || renderer.textContent);
+    btnCopyArtifact.innerHTML = '<span>✓ Copiado</span>';
+    setTimeout(() => { btnCopyArtifact.innerHTML = '<span>📋 Copiar Artefacto</span>'; }, 2000);
+  });
+
+  const btnSaveArtifactFlashcard = document.getElementById('btnSaveArtifactFlashcard');
+  btnSaveArtifactFlashcard?.addEventListener('click', async () => {
+    const activeSrc = state.notebook.activeSource;
+    if (!activeSrc) return;
+    try {
+      await fetch(`${API_BASE}/api/library/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject_id: 'ai_foundations',
+          title: `[Teorema] ${activeSrc.topic || 'Conocimiento Universitario'}`,
+          content: `${activeSrc.formula_latex || ''}\n\n${activeSrc.content || ''}`,
+          mastery_level: 1
+        })
+      });
+      playAudioChime(659.25, 0.4);
+      btnSaveArtifactFlashcard.innerHTML = '<span>✓ Guardado en Supabase</span>';
+      setTimeout(() => { btnSaveArtifactFlashcard.innerHTML = '<span>💾 Guardar como Flashcard SM-2</span>'; }, 2000);
+    } catch (e) {
+      alert(`Error al guardar flashcard: ${e.message}`);
+    }
+  });
+
+  const btnRegenerateArtifact = document.getElementById('btnRegenerateArtifact');
+  btnRegenerateArtifact?.addEventListener('click', () => {
+    const activeSrc = state.notebook.activeSource;
+    if (!activeSrc) return;
+    const cacheKey = `${activeSrc.id || activeSrc.topic}_${state.notebook.activeArtifactType}`;
+    delete state.notebook.cachedArtifacts[cacheKey];
+    generateOrLoadArtifact(state.notebook.activeArtifactType);
+  });
+
+  const btnSendGroundedQuery = document.getElementById('btnSendGroundedQuery');
+  btnSendGroundedQuery?.addEventListener('click', sendGroundedChatQuery);
+
+  const groundedChatInput = document.getElementById('groundedChatInput');
+  groundedChatInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendGroundedChatQuery();
+  });
+
   // Arranque Inicial
   updateTimerDisplay();
   await loadArchetypes('ai');
   fetchDailyStudyStats();
+  loadNotebookSources();
 });

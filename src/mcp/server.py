@@ -77,6 +77,46 @@ MCP_TOOLS = [
             },
             "required": ["archetype_id"]
         }
+    },
+    {
+        "name": "research_global_engineering_knowledge",
+        "description": "Investiga conocimiento público de las mejores universidades del mundo (MIT, Stanford, MGU, Tsinghua), traduce al español con fórmulas KaTeX y guarda en Supabase pgvector.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "Concepto o teorema a investigar (ej: 'Ecuaciones de Navier-Stokes', 'Filtro de Kalman')"},
+                "university_preference": {"type": "string", "description": "mit, stanford, moscow, tsinghua, harvard, eth, polytechnique"},
+                "discipline": {"type": "string", "description": "Disciplina de ingeniería"}
+            },
+            "required": ["topic"]
+        }
+    },
+    {
+        "name": "generate_notebook_study_artifact",
+        "description": "Genera artefactos de estudio estilo NotebookLLM: guías de estudio, formularios de ecuaciones KaTeX, desafíos de examen o guiones de podcast a 2 voces.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "Tema del artefacto"},
+                "source_content": {"type": "string", "description": "Contenido base de las fuentes"},
+                "artifact_type": {"type": "string", "enum": ["study_guide", "equations_formulary", "exam_challenges", "faq_deep_dive", "audio_overview_script"]}
+            },
+            "required": ["topic", "source_content"]
+        }
+    },
+    {
+        "name": "ingest_academic_document",
+        "description": "Ingesta notas de clase, transcripciones o syllabus en la base de datos vectorial de Supabase Cloud.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Título del apunte"},
+                "content": {"type": "string", "description": "Texto del documento"},
+                "discipline": {"type": "string", "description": "Rama de la ingeniería"},
+                "university": {"type": "string", "description": "Institución o autor"}
+            },
+            "required": ["title", "content"]
+        }
     }
 ]
 
@@ -242,6 +282,31 @@ class McpProtocolHandler:
             user_params = args.get("params") or solver.default_params
             res = solver.solve(user_params)
             return res.model_dump()
+
+        elif name == "research_global_engineering_knowledge":
+            topic = args.get("topic", "")
+            univ = args.get("university_preference")
+            disc = args.get("discipline")
+            return gemini_tutor.research_global_university_topic(topic, univ, disc)
+
+        elif name == "generate_notebook_study_artifact":
+            topic = args.get("topic", "")
+            content = args.get("source_content", "")
+            art_type = args.get("artifact_type", "study_guide")
+            return gemini_tutor.generate_notebook_artifact(topic, content, art_type)
+
+        elif name == "ingest_academic_document":
+            doc = {
+                "topic": args.get("title", "Apunte de Clase"),
+                "content": args.get("content", ""),
+                "discipline": args.get("discipline", "Ingeniería"),
+                "university": args.get("university", "Apunte Personal"),
+                "country": "Ecuador / Local",
+                "formula_latex": r"\text{Notas de Estudio}",
+                "pedagogical_style": "Documento Académico Ingestado",
+                "engineering_application": "Material personalizado para I.S.T. Carlos Cisneros"
+            }
+            return supabase_manager.save_university_knowledge(doc)
 
         return {"error": f"Herramienta desconocida: {name}"}
 

@@ -105,6 +105,11 @@
         <span>Hub MCP & Cloud</span>
         <span class="badge-subtle">JSON-RPC</span>
       </button>
+      <button class="mode-tab-btn" id="tabModeNotebook" data-view="notebook">
+        <span class="mode-icon">📚</span>
+        <span>Notebook Universitario</span>
+        <span class="badge-glow">Investigación Global</span>
+      </button>
     </div>
 
     <div class="active-pedagogy-summary" id="activePedagogySummary">
@@ -557,6 +562,246 @@
               <pre id="mcpOutputPre">Esperando ejecución...</pre>
             </div>
           </div>
+
+        </div>
+      </div>
+
+      <!-- ==============================================================
+           VISTA 6: NOTEBOOK UNIVERSITARIO & INVESTIGACIÓN GLOBAL (NOTEBOOKLLM STUDIO)
+           ============================================================== -->
+      <div class="view-panel" id="notebookStudioView">
+        <div class="notebook-layout-grid">
+          
+          <!-- COLUMNA IZQUIERDA: FUENTES & INVESTIGADOR MULTILINGÜE -->
+          <aside class="notebook-sources-panel">
+            <div class="panel-header-mini">
+              <div>
+                <span class="hero-badge">Cátedras Mundiales Abiertas</span>
+                <h3>Fuentes Universitarias</h3>
+              </div>
+              <span class="badge-tag" id="sourcesCountBadge">0 fuentes</span>
+            </div>
+
+            <!-- Barra de Búsqueda e Investigación Global -->
+            <div class="academic-search-card">
+              <label class="search-label">Investigar en Universidades del Mundo:</label>
+              <div class="search-input-group">
+                <input 
+                  type="text" 
+                  id="academicSearchInput" 
+                  class="academic-input" 
+                  placeholder="Ej: Navier-Stokes, Filtro de Kalman, Jacobiano DH, Transformers..." 
+                  value="Ecuaciones de Navier-Stokes y Derivación por Momentos"
+                />
+              </div>
+
+              <!-- Filtros de Universidad y Disciplina -->
+              <div class="filter-row-mini">
+                <select id="researchUnivSelect" class="form-input-mini">
+                  <option value="all">Todas las Universidades de Élite</option>
+                  <option value="mit">MIT (EE.UU.)</option>
+                  <option value="stanford">Stanford University (EE.UU.)</option>
+                  <option value="moscow">Univ. Estatal de Moscú - MGU (Rusia)</option>
+                  <option value="tsinghua">Univ. Tsinghua (China)</option>
+                  <option value="harvard">Harvard University (EE.UU.)</option>
+                  <option value="eth">ETH Zürich (Suiza)</option>
+                  <option value="polytechnique">École Polytechnique (Francia)</option>
+                </select>
+
+                <select id="researchDiscSelect" class="form-input-mini">
+                  <option value="all">Todas las Ingenierías</option>
+                  <option value="ai">Inteligencia Artificial</option>
+                  <option value="robotics">Robótica y Control</option>
+                  <option value="os">Sistemas Operativos</option>
+                  <option value="mechanics">Ingeniería Mecánica</option>
+                  <option value="math">Matemáticas y Baldor</option>
+                </select>
+              </div>
+
+              <!-- Botón de Ejecución de Investigación -->
+              <button class="btn-research-glow" id="btnResearchGlobal">
+                <span>⚡ Investigar & Traducir al Español</span>
+              </button>
+
+              <!-- Indicador de Idiomas -->
+              <div class="multilingual-flag-banner">
+                <span class="flag-icon">🌐</span>
+                <span class="flag-desc">Literatura en <strong>EN · RU · ZH · FR · DE</strong> ➔ <strong>Español Académico</strong></span>
+              </div>
+            </div>
+
+            <!-- Chips de Investigación Rápida -->
+            <div class="quick-research-presets">
+              <span class="presets-label">Temas Clave de Ingeniería:</span>
+              <div class="presets-grid-mini">
+                <button class="chip-mini" data-topic="Filtro de Kalman Extendido en Robótica Móvil" data-univ="mit" data-disc="robotics">
+                  Filtro de Kalman (MIT)
+                </button>
+                <button class="chip-mini" data-topic="Ecuaciones de Navier-Stokes e Incompresibilidad" data-univ="polytechnique" data-disc="mechanics">
+                  Navier-Stokes (Polytechnique)
+                </button>
+                <button class="chip-mini" data-topic="Mecanismo de Auto-Atención Multi-Cabeza en Transformers" data-univ="stanford" data-disc="ai">
+                  Transformers QKV (Stanford)
+                </button>
+                <button class="chip-mini" data-topic="Cinemática Diferencial y Matriz Jacobiana de Robots" data-univ="eth" data-disc="robotics">
+                  Jacobiano DH (ETH Zürich)
+                </button>
+                <button class="chip-mini" data-topic="Paginación Multinivel y TLB en Núcleos de SO" data-univ="moscow" data-disc="os">
+                  Paginación MMU (MGU Moscú)
+                </button>
+                <button class="chip-mini" data-topic="Control Óptimo LQR y Estabilidad de Lyapunov" data-univ="tsinghua" data-disc="robotics">
+                  Control LQR (Tsinghua)
+                </button>
+              </div>
+            </div>
+
+            <!-- Botón para Ingestar Apuntes Propios -->
+            <button class="btn-toggle-ingest" id="btnToggleIngestForm">
+              <span>+ Ingestar Apunte o Syllabus Propio</span>
+            </button>
+
+            <!-- Formulario Desplegable de Ingesta Personalizada -->
+            <div class="manual-ingest-box hidden" id="manualIngestBox">
+              <input type="text" id="customNoteTitle" class="form-input-mini" placeholder="Título del apunte o clase" />
+              <textarea id="customNoteContent" class="form-textarea-mini" rows="3" placeholder="Pega aquí el texto, notas de clase o syllabus..."></textarea>
+              <button class="btn-action btn-primary" id="btnSubmitCustomSource" style="width: 100%; margin-top: 6px;">
+                <span>💾 Guardar e Indexar en Supabase</span>
+              </button>
+            </div>
+
+            <!-- Lista de Fuentes Ingestadas en Supabase -->
+            <div class="sources-list-container">
+              <div class="sources-list-header">Fuentes Disponibles en la Nube:</div>
+              <div class="sources-list" id="notebookSourcesList">
+                <!-- Fuentes cargadas dinámicamente -->
+              </div>
+            </div>
+
+          </aside>
+
+          <!-- COLUMNA CENTRAL: ESTUDIO DE ARTEFACTOS NOTEBOOKLLM -->
+          <main class="notebook-studio-panel">
+            
+            <!-- Cabecera de la Fuente Activa -->
+            <div class="studio-header-card">
+              <div class="studio-topic-meta">
+                <span class="active-source-badge" id="studioUnivBadge">MIT / Stanford Open Knowledge</span>
+                <h2 class="studio-topic-title" id="studioTopicTitle">Ecuaciones de Navier-Stokes y Dinámica de Fluidos</h2>
+                <div class="studio-tags-row">
+                  <span class="tag-pill" id="studioDisciplineTag">Ingeniería Mecánica</span>
+                  <span class="tag-pill tag-trans">Traducción Académica: 🇺🇸 EN / 🇷🇺 RU ➔ 🇪🇸 ES</span>
+                  <span class="tag-pill tag-katex">Fórmulas KaTeX Exactas</span>
+                </div>
+              </div>
+
+              <!-- Selector de Artefactos de Estudio (Estilo NotebookLLM) -->
+              <div class="studio-artifact-tabs" id="studioArtifactTabs">
+                <button class="artifact-tab active" data-artifact="study_guide">
+                  <span class="art-icon">📑</span>
+                  <span>Guía de Estudio</span>
+                </button>
+                <button class="artifact-tab" data-artifact="equations_formulary">
+                  <span class="art-icon">📐</span>
+                  <span>Formulario de Ecuaciones</span>
+                </button>
+                <button class="artifact-tab" data-artifact="exam_challenges">
+                  <span class="art-icon">🎯</span>
+                  <span>Examen Universitario</span>
+                </button>
+                <button class="artifact-tab" data-artifact="faq_deep_dive">
+                  <span class="art-icon">💡</span>
+                  <span>FAQ & Errores Clave</span>
+                </button>
+                <button class="artifact-tab tab-podcast" data-artifact="audio_overview_script">
+                  <span class="art-icon">🎙️</span>
+                  <span>Audio Overview (Podcast)</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Barra de Reproductor de Audio Podcast (Exclusivo de Audio Overview) -->
+            <div class="audio-podcast-banner hidden" id="audioPodcastBanner">
+              <div class="podcast-speakers">
+                <div class="speaker-avatar avatar-elena">ER</div>
+                <div class="speaker-meta">
+                  <span class="speaker-names">Dra. Elena Ramos & Dr. Mateo Silva</span>
+                  <span class="speaker-role">Discusión Socrática a 2 Voces · Síntesis por Voz en Español</span>
+                </div>
+                <div class="speaker-avatar avatar-mateo">MS</div>
+              </div>
+
+              <div class="podcast-controls">
+                <button class="btn-podcast-play" id="btnPlayPodcast">
+                  <span id="playPodcastIcon">▶</span>
+                  <span id="playPodcastText">Reproducir Audio Podcast</span>
+                </button>
+                <button class="btn-podcast-stop" id="btnStopPodcast" title="Detener audio">
+                  ⏹ Detener
+                </button>
+              </div>
+
+              <div class="podcast-wave-anim" id="podcastWaveAnim">
+                <span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span>
+                <span class="wave-bar"></span><span class="wave-bar"></span><span class="wave-bar"></span>
+              </div>
+            </div>
+
+            <!-- Fórmulas KaTeX de la Fuente -->
+            <div class="studio-formula-showcase" id="studioFormulaShowcase">
+              <span class="formula-label-tag">Ecuación Gobernativa Principal:</span>
+              <div class="formula-render-box" id="studioFormulaRender"></div>
+            </div>
+
+            <!-- Acciones Rápidas sobre el Artefacto -->
+            <div class="artifact-actions-bar">
+              <button class="action-btn" id="btnCopyArtifact" title="Copiar texto en formato Markdown">
+                <span>📋 Copiar Artefacto</span>
+              </button>
+              <button class="action-btn" id="btnSaveArtifactFlashcard" title="Convertir a tarjeta de repetición espaciada SM-2">
+                <span>💾 Guardar como Flashcard SM-2</span>
+              </button>
+              <button class="action-btn" id="btnRegenerateArtifact" title="Regenerar con IA">
+                <span>↺ Regenerar Artefacto</span>
+              </button>
+            </div>
+
+            <!-- Área de Visualización del Artefacto (Markdown + KaTeX) -->
+            <div class="studio-content-renderer" id="studioContentRenderer">
+              <div class="loading-state-box">
+                <span class="pulse-indicator status-cyan"></span>
+                <p>Cargando fuentes y generando guía académica con KaTeX...</p>
+              </div>
+            </div>
+
+            <!-- SECCIÓN INFERIOR: CHAT GROUNDED CON LAS FUENTES -->
+            <div class="grounded-chat-card">
+              <div class="grounded-chat-header">
+                <span class="grounded-badge">✦ Grounded Q&A</span>
+                <h4>Pregúntale a las Fuentes Universitarias Seleccionadas</h4>
+                <span class="grounded-sub">Respuestas fundamentadas con citas de MIT, Stanford, MGU o Tsinghua</span>
+              </div>
+
+              <div class="grounded-chat-stream" id="groundedChatStream">
+                <div class="chat-bubble tutor">
+                  <p>Pregúntame cualquier derivación, significado de términos o límites de validez sobre las fuentes activas en tu Notebook.</p>
+                </div>
+              </div>
+
+              <div class="grounded-input-row">
+                <input 
+                  type="text" 
+                  id="groundedChatInput" 
+                  class="grounded-input" 
+                  placeholder="Ej: ¿Por qué el término convectivo genera turbulencia? ¿De dónde sale la Ganancia de Kalman?"
+                />
+                <button class="btn-send-glow" id="btnSendGroundedQuery">
+                  <span>Preguntar</span>
+                  <span>➤</span>
+                </button>
+              </div>
+            </div>
+
+          </main>
 
         </div>
       </div>

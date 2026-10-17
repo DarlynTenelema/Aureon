@@ -127,6 +127,57 @@ def test_api():
     assert r_note.status_code == 200
     print("    [OK] Flashcard de estudio creada.")
 
+    print("\n--> 9. Probando Motor de Investigación Global & NotebookLLM Studio...")
+    # 9.1 Investigar tema global en universidades (ej: Filtro de Kalman o Navier Stokes)
+    r_res = client.post("/api/tutor/research-global", json={
+        "topic": "Filtro de Kalman Extendido en Robótica Móvil",
+        "university_preference": "mit",
+        "discipline": "Robótica y Control"
+    })
+    assert r_res.status_code == 200
+    dossier = r_res.json()
+    assert "formula_latex" in dossier
+    assert "equations_list" in dossier
+    print(f"    [OK] Investigación universitaria generada: '{dossier['title']}' con fórmula {dossier['formula_latex'][:40]}...")
+
+    # 9.2 Listar fuentes universitarias
+    r_sources = client.get("/api/tutor/sources")
+    assert r_sources.status_code == 200
+    sources_data = r_sources.json()
+    assert sources_data["count"] > 0
+    print(f"    [OK] Fuentes universitarias activas en Supabase: {sources_data['count']} fuentes.")
+
+    # 9.3 Generar artefacto de estudio (Formulario de Ecuaciones y Podcast)
+    r_art = client.post("/api/tutor/generate-notebook-artifact", json={
+        "topic": "Filtro de Kalman",
+        "source_content": dossier["content"],
+        "artifact_type": "equations_formulary"
+    })
+    assert r_art.status_code == 200
+    art_data = r_art.json()
+    assert "content" in art_data
+    print("    [OK] Formulario maestro de ecuaciones generado con KaTeX.")
+
+    # 9.4 Generar Guión de Audio Podcast a 2 voces
+    r_podcast = client.post("/api/tutor/generate-notebook-artifact", json={
+        "topic": "Filtro de Kalman",
+        "source_content": dossier["content"],
+        "artifact_type": "audio_overview_script"
+    })
+    assert r_podcast.status_code == 200
+    assert "Dra. Elena Ramos" in r_podcast.json()["content"]
+    print("    [OK] Guión de audio podcast a 2 voces (NotebookLLM) generado con éxito.")
+
+    # 9.5 Chat fundamentado en las fuentes
+    r_chat = client.post("/api/tutor/chat-sources", json={
+        "query": "¿Por qué la ganancia de Kalman K pondera la covarianza de error?",
+        "source_ids": [dossier.get("id")]
+    })
+    assert r_chat.status_code == 200
+    chat_res = r_chat.json()
+    assert "answer" in chat_res
+    print("    [OK] Chat fundamentado en fuentes universitarias respondió con rigor.")
+
 if __name__ == "__main__":
     test_api()
     print("\n====================================================================")
