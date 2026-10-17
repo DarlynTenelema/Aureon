@@ -20,7 +20,6 @@ service_account.json
 credentials.json
 *.pem
 *.key
-*.json
 
 # Database files & local storage
 data/*.db
